@@ -15,6 +15,7 @@ set expandtab
 syntax on
 set hlsearch
 
+set mouse=
 set backspace=indent,eol,start
 call plug#begin()
 "let g:plug_url_format = 'git@github.com:%s.git'
