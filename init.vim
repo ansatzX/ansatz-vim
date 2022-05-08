@@ -10,7 +10,7 @@ let $LANG = 'en_US.UTF-8'
 set ts=2
 set softtabstop=2
 set shiftwidth=2
-set expandtab
+"set expandtab
 
 syntax on
 set hlsearch
@@ -52,3 +52,5 @@ let g:ycm_filetype_whitelist = {
 			\ "zsh":1,
 			\ "zimbu":1,
 			\ }
+" fprettify  integration
+autocmd Filetype fortran setlocal formatprg=fprettify\ --silent
