@@ -5,15 +5,43 @@ set nowritebackup
 setlocal noswapfile
 set nocompatible
 
-set fileencodings=utf-8,gbk2312,gbk,gb18030,cp936
+let s:plug_vim = expand('~/.vim/autoload/plug.vim')
+if empty(glob(s:plug_vim))
+  if executable('curl')
+    echom 'vim-plug not found; installing it with curl...'
+    call system([
+          \ 'curl',
+          \ '-fLo',
+          \ s:plug_vim,
+          \ '--create-dirs',
+          \ 'https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim',
+          \ ])
+    if v:shell_error
+      echohl WarningMsg
+      echom 'vim-plug install failed. Install it manually, then run :PlugInstall.'
+      echohl None
+    else
+      augroup ansatz_vim_bootstrap
+        autocmd!
+        autocmd VimEnter * PlugInstall --sync \| source $MYVIMRC
+      augroup END
+    endif
+  else
+    echohl WarningMsg
+    echom 'vim-plug not found. Install it manually, then run :PlugInstall.'
+    echohl None
+  endif
+endif
+
+set fileencodings=utf-8,gb18030,gbk,gb2312,cp936
 set encoding=utf-8
 set langmenu=zh_CN
 let $LANG = 'en_US.UTF-8'
 
-set ts=2
-set softtabstop=2
-set shiftwidth=2
-"set expandtab
+set tabstop=4
+set softtabstop=4
+set shiftwidth=4
+set expandtab
 syntax enable
 syntax on
 set hlsearch
@@ -36,20 +64,80 @@ filetype indent on
 set clipboard+=unnamed
 set nowrap
 
-call plug#begin()
-"let g:plug_url_format = 'git@github.com:%s.git'
-  Plug 'rust-lang/rust.vim'
-  "Plug 'cp2k/vim-cp2k'
-  Plug 'arnoudbuzing/wolfram-vim',{'for':'wolfram'}
-  "Plug 'Valloric/YouCompleteMe',{'for':'python' }
-	Plug 'neoclide/coc.nvim', {'branch': 'release'}
-	Plug 'vim-airline/vim-airline'
-	Plug 'vim-airline/vim-airline-themes'
-	Plug 'liuchengxu/vim-clap'
-call plug#end()
+function! s:WrapOn() abort
+  setlocal wrap linebreak
+endfunction
 
-" fprettify  integration
-autocmd Filetype fortran setlocal formatprg=fprettify\ --silent
+function! s:WrapOff() abort
+  setlocal nowrap nolinebreak
+endfunction
+
+function! s:ToggleWrap() abort
+  if &l:wrap
+    call s:WrapOff()
+  else
+    call s:WrapOn()
+  endif
+endfunction
+
+command! WrapOn call s:WrapOn()
+command! WrapOff call s:WrapOff()
+command! WrapToggle call s:ToggleWrap()
+nnoremap <silent> <leader>tw :WrapToggle<CR>
+
+function! s:SetIndent(width) abort
+  let &l:tabstop = a:width
+  let &l:softtabstop = a:width
+  let &l:shiftwidth = a:width
+  setlocal expandtab
+endfunction
+
+function! s:SetNoExpandTabIndent(width) abort
+  let &l:tabstop = a:width
+  let &l:softtabstop = a:width
+  let &l:shiftwidth = a:width
+  setlocal noexpandtab
+endfunction
+
+augroup ansatz_indent
+  autocmd!
+  autocmd FileType sh,bash,zsh call s:SetIndent(2)
+  autocmd FileType python call s:SetIndent(4)
+  autocmd FileType make call s:SetNoExpandTabIndent(4)
+augroup END
+
+if !empty(glob(s:plug_vim))
+  call plug#begin()
+  "let g:plug_url_format = 'git@github.com:%s.git'
+    Plug 'rust-lang/rust.vim'
+    "Plug 'cp2k/vim-cp2k'
+    Plug 'arnoudbuzing/wolfram-vim'
+    "Plug 'Valloric/YouCompleteMe',{'for':'python' }
+    Plug 'neoclide/coc.nvim', {'branch': 'release'}
+    Plug 'vim-airline/vim-airline'
+    Plug 'vim-airline/vim-airline-themes'
+    Plug 'liuchengxu/vim-clap'
+  call plug#end()
+endif
+
+" formatprg integration
+function! s:SetFormatprg(executable, command) abort
+  if executable(a:executable)
+    let &l:formatprg = a:command
+  endif
+endfunction
+
+augroup ansatz_formatprg
+  autocmd!
+  autocmd FileType fortran call s:SetFormatprg('fprettify', 'fprettify --silent')
+  autocmd FileType python call s:SetFormatprg('ruff', 'ruff format -')
+  autocmd FileType json call s:SetFormatprg('jq', 'jq .')
+augroup END
+
+augroup ansatz_wolfram
+  autocmd!
+  autocmd BufNewFile,BufRead *.wl,*.wls setlocal filetype=wl syntax=wl
+augroup END
 
 noremap <c-z> <NOP>
 
@@ -62,8 +150,12 @@ set updatetime=300
 
 " Always show the signcolumn, otherwise it would shift the text each time
 " diagnostics appear/become resolved.
-set signcolumn=no
+set signcolumn=yes
 
+let s:coc_plug = get(get(g:, 'plugs', {}), 'coc.nvim', {})
+let s:coc_dir = expand(get(s:coc_plug, 'dir', ''))
+if !empty(s:coc_dir) && isdirectory(s:coc_dir)
+" coc.nvim integration
 " Use tab for trigger completion with characters ahead and navigate.
 " NOTE: There's always complete item selected by default, you may want to enable
 " no select by `"suggest.noselect": true` in your configuration file.
@@ -114,8 +206,15 @@ function! ShowDocumentation()
   endif
 endfunction
 
-" Highlight the symbol and its references when holding the cursor.
-autocmd CursorHold * silent call CocActionAsync('highlight')
+augroup ansatz_coc
+  autocmd!
+  " Highlight the symbol and its references when holding the cursor.
+  autocmd CursorHold * silent call CocActionAsync('highlight')
+  " Setup formatexpr specified filetype(s).
+  autocmd FileType typescript,json setlocal formatexpr=CocAction('formatSelected')
+  " Update signature help on jump placeholder.
+  autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
+augroup END
 
 " Symbol renaming.
 nmap <leader>rn <Plug>(coc-rename)
@@ -123,14 +222,6 @@ nmap <leader>rn <Plug>(coc-rename)
 " Formatting selected code.
 xmap <leader>f  <Plug>(coc-format-selected)
 nmap <leader>f  <Plug>(coc-format-selected)
-
-augroup mygroup
-  autocmd!
-  " Setup formatexpr specified filetype(s).
-  autocmd FileType typescript,json setl formatexpr=CocAction('formatSelected')
-  " Update signature help on jump placeholder.
-  autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
-augroup end
 
 " Applying codeAction to the selected region.
 " Example: `<leader>aap` for current paragraph
@@ -183,7 +274,10 @@ command! -nargs=0 OR   :call     CocActionAsync('runCommand', 'editor.action.org
 " Add (Neo)Vim's native statusline support.
 " NOTE: Please see `:h coc-status` for integrations with external plugins that
 " provide custom statusline: lightline.vim, vim-airline.
-set statusline^=%{coc#status()}%{get(b:,'coc_current_function','')}
+let s:coc_statusline = "%{coc#status()}%{get(b:,'coc_current_function','')}"
+if &statusline !~# '^%!' && stridx(&statusline, s:coc_statusline) < 0
+  let &statusline = s:coc_statusline . &statusline
+endif
 
 " Mappings for CoCList
 " Show all diagnostics.
@@ -202,6 +296,7 @@ nnoremap <silent><nowait> <space>j  :<C-u>CocNext<CR>
 nnoremap <silent><nowait> <space>k  :<C-u>CocPrev<CR>
 " Resume latest coc list.
 nnoremap <silent><nowait> <space>p  :<C-u>CocListResume<CR>
+endif
 
 "airline
 "let g:airline#extensions#tabline#enabled = 1
